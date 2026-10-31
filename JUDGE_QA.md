@@ -1,0 +1,98 @@
+# Likely judge questions (and answers)
+
+Everyone on the team should be able to answer the first eight.
+
+**1. How do you prevent look-ahead bias?**
+Four layers. (a) Every feature only uses rolling windows and past shifts. (b) We prove it with a truncation
+test: recompute each feature on history cut off at day k; a causal feature gives the same value at day k
+as on the full history. If adding future rows changes it, it is leaking. (c) The scaler sits inside the
+sklearn pipeline, so it is fitted on training rows only. (d) In the backtest, the position for day t+1 is
+the prediction made at the close of day t (`signal.shift(1)`).
+
+**2. What is purging and why do you do it?**
+The label for day t looks h days ahead. The last h training rows therefore have labels that depend on
+prices inside the test period. We drop them so no test-period information reaches training. Embargo
+optionally skips extra days after the split.
+
+**3. Why not use a random train/test split or normal k-fold?**
+Shuffling puts future days in the training set and past days in the test set, so the model learns from
+the future. Markets also change over time (regimes). We use a chronological split and walk-forward
+evaluation, which mimics how the model would actually be used.
+
+**4. What is walk-forward evaluation?**
+Train on data up to a date, test on the next block, move forward, retrain, repeat. Expanding window uses
+all past data; rolling window uses a fixed-length recent window. It shows whether performance is stable
+over time or came from one lucky period.
+
+**5. Why did the Overfit Trap get 100% train accuracy but ~51% test?**
+An unlimited-depth tree with 1-sample leaves can give every training day its own leaf, so it memorises
+noise. Daily returns are mostly noise, so those memorised patterns never repeat. Our robustness score
+penalises the train-test gap, so it ranks last even though it would rank first by training accuracy.
+
+**6. Accuracy is 53%. Isn't that useless?**
+Compare to the right baseline: always guessing the majority class gets about 51%. A 2–3 point edge on
+daily direction can be meaningful if it holds across folds and assets, but costs can eat it. That is why
+we show accuracy, returns and risk-adjusted metrics separately: they answer different questions.
+
+**7. How are transaction costs modelled?**
+Commission + slippage in basis points, charged on the absolute change in position on every day,
+including entry and exit. We show returns and Sharpe before and after costs. Runs below 5 bps are
+disqualified from the leaderboard as unrealistic.
+
+**8. How is the experiment reproducible?**
+We store the full config, a SHA-256 of the dataset file, the random seed and library versions. The
+Reproduce button re-runs from the saved config and compares the config hash, the dataset checksum, a
+fingerprint of every prediction and a fingerprint of the metrics. Dataset files are checksum-verified
+before every run, and datasets used by experiments cannot be deleted.
+
+**9. What is the Sharpe ratio and the confidence interval?**
+Annualised mean daily return divided by annualised volatility (risk-free rate taken as 0). The 95% CI
+uses Lo's (2002) standard error, sqrt((1 + SR²/2) / years). If it includes zero, we say the result could
+be luck.
+
+**10. Explain the robustness score.**
+Out-of-sample Sharpe (walk-forward mean) − 0.5 × Sharpe standard deviation across folds − 3 × (train
+accuracy − test accuracy) + 0.5 × (Sharpe − buy-and-hold Sharpe, capped at ±1). Without walk-forward, the Sharpe standard error replaces
+the fold standard deviation, so skipping walk-forward never helps. It rewards stable,
+out-of-sample, benchmark-beating performance. Leaky or zero-cost runs are disqualified.
+
+**11. How are market regimes defined without leaking?**
+Trend: price above or below its 200-day moving average. Volatility: 20-day volatility above or below its
+median over the training period only. Both are shifted by one day, because that is what was known when
+the position was chosen.
+
+**12. Why logistic regression, random forest and gradient boosting?**
+They span simple-to-flexible. LR is a strong, hard-to-overfit baseline; RF and GB capture non-linear
+interactions but need regularisation (depth, leaf size, learning rate) on noisy data.
+
+**13. What happens with bad data?**
+Missing required columns, too few rows or multiple symbols → rejected with a clear message. Unparseable
+or missing timestamps → dropped. Duplicates → last kept. Unsorted → sorted. Non-numeric or negative
+prices → treated as missing and forward-filled at most 5 days (never back-filled, which would leak).
+High < low → swapped. Moves above 40% → flagged as possible splits.
+
+**14. How do background jobs and live progress work?**
+Experiments run in a thread pool. Progress is written to memory and SQLite; the browser subscribes with
+Server-Sent Events and falls back to polling. Jobs interrupted by a restart are re-queued on startup.
+
+**15. Is the demo data real?**
+No. It is synthetic, generated by a regime-switching model with a weak momentum effect, so the demo is
+deterministic and offline. `scripts/fetch_yfinance.py` downloads real NSE data for upload.
+
+**16. Limitations?**
+Close-price execution, fixed-bps costs, no borrow fees for shorts, single-asset models, survivorship bias,
+and the multiple-testing problem: trying many configs and keeping the best is itself overfitting. All
+listed in the report.
+
+**17. The Kaggle NSE data isn't split-adjusted. How do you handle that?**
+On an ex-date NSE publishes an adjusted *Prev Close*. If prev_close[t] / close[t-1] is well below 1 and the
+opening gap agrees, it is a split or bonus, and the ratio is the exact adjustment factor. We multiply all
+earlier prices by it (and divide volume). Without this, RELIANCE's 2017 1:1 bonus looks like a 50% crash.
+Without a Prev Close column we only adjust gaps that match a standard split ratio, and flag them.
+
+**18. Why random forest and not XGBoost? Which gets higher accuracy?**
+We tested it (`scripts/model_comparison.py`, RELIANCE, identical settings): regularized random forest 51.6%,
+XGBoost 51.7%, sklearn gradient boosting 51.7%, logistic regression 50.7%. With 1,577 test days the 95% margin
+is about ±2.5 points, so they tie, and none beats always-guessing (52.0%). At library defaults both random
+forest and XGBoost overfit (98–100% train accuracy, ~49% test). Regularization matters more than the library.
+We ship sklearn's gradient boosting (same family as XGBoost) to avoid an extra native dependency.
