@@ -65,18 +65,21 @@ const dividerPlugin = {
     ctx.save();
     ctx.fillStyle = cssVar("--grid") || "rgba(0,0,0,0.04)";
     ctx.globalAlpha = 1;
-    ctx.fillStyle = "rgba(124,140,255,0.07)";
+    ctx.fillStyle = "rgba(139,155,255,0.06)";
     ctx.fillRect(a.left, a.top, px - a.left, a.bottom - a.top);
-    ctx.strokeStyle = cssVar("--ink");
+    ctx.strokeStyle = cssVar("--cyan");
+    ctx.shadowColor = cssVar("--cyan");
+    ctx.shadowBlur = 8;
     ctx.setLineDash([5, 4]);
     ctx.lineWidth = 1.2;
     ctx.beginPath(); ctx.moveTo(px, a.top); ctx.lineTo(px, a.bottom); ctx.stroke();
     ctx.setLineDash([]);
+    ctx.shadowBlur = 0;
     ctx.font = "600 12px 'IBM Plex Sans', sans-serif";
     const tag = (text, x, align, color) => {
       const w = ctx.measureText(text).width;
       const bx = align === "right" ? x - w - 8 : x;
-      ctx.fillStyle = cssVar("--panel");
+      ctx.fillStyle = "rgba(10,15,30,0.9)";
       ctx.fillRect(bx, a.bottom - 26, w + 8, 20);
       ctx.fillStyle = color;
       ctx.textAlign = "left";
@@ -88,6 +91,11 @@ const dividerPlugin = {
   },
 };
 
+if (window.Chart) {
+  Chart.defaults.font.family = "'IBM Plex Sans', system-ui, sans-serif";
+  Chart.defaults.color = "#8692B0";
+}
+
 function baseOptions({ yPct = false, log = false, yTitle = "" } = {}) {
   const ink = cssVar("--muted"), rule = cssVar("--rule");
   return {
@@ -96,6 +104,8 @@ function baseOptions({ yPct = false, log = false, yTitle = "" } = {}) {
     plugins: {
       legend: { display: false },
       tooltip: {
+        backgroundColor: "rgba(10, 15, 30, 0.95)", borderColor: "rgba(62, 230, 255, 0.35)", borderWidth: 1,
+        titleColor: "#E8EDFB", bodyColor: "#C3CBE3", padding: 10, cornerRadius: 8, displayColors: true, boxPadding: 4,
         callbacks: { label: (c) => `${c.dataset.label}: ${c.parsed.y == null ? "–" : yPct ? pct(c.parsed.y) : num(c.parsed.y, 3)}` },
       },
     },
@@ -141,6 +151,14 @@ async function loadProjects() {
     ? S.projects.map((p) => `<option value="${p.id}">${esc(p.name)}</option>`).join("")
     : `<option value="">No projects yet</option>`;
   if (S.pid) sel.value = S.pid;
+  const card = $("#statusCard");
+  if (card) {
+    const nd = S.projects.reduce((a, p) => a + p.n_datasets, 0), ne = S.projects.reduce((a, p) => a + p.n_experiments, 0);
+    card.innerHTML = `<b><span class="live-dot"></span>Engine online</b>
+      <div class="status-row"><span>Projects</span><span>${S.projects.length}</span></div>
+      <div class="status-row"><span>Datasets</span><span>${nd}</span></div>
+      <div class="status-row"><span>Experiments</span><span>${ne}</span></div>`;
+  }
 }
 
 function renderNav(active) {
@@ -288,6 +306,13 @@ async function renderHome() {
       <div class="actions"><a class="btn" href="#/p/${S.pid}/datasets">Upload data</a><a class="btn primary" href="#/p/${S.pid}/new">New experiment</a></div>
     </div>
 
+    <div class="stats">
+      <div class="stat"><span>Datasets</span><b>${datasets.length}</b><small>${datasets.reduce((a, d) => a + d.rows, 0).toLocaleString()} daily rows validated</small></div>
+      <div class="stat"><span>Experiments run</span><b>${exps.filter((e) => e.status === "done").length}</b><small>${running ? "more running now" : "all reproducible"}</small></div>
+      <div class="stat ${ranked.length && ranked[0].score > 0 ? "good" : ranked.length ? "bad" : ""}"><span>Best robustness score</span><b>${ranked.length ? num(ranked[0].score) : "–"}</b><small>${ranked.length ? esc(ranked[0].name) : "no finished runs yet"}</small></div>
+      <div class="stat ${lb.disqualified.length ? "bad" : "good"}"><span>Runs disqualified</span><b>${lb.disqualified.length}</b><small>look-ahead leakage or unrealistic costs</small></div>
+    </div>
+
     <section class="panel">
       <div class="panel-head"><h2>Leaderboard</h2><span class="muted small">Ranked by robustness, not training accuracy</span></div>
       ${ranked.length ? `<div class="tbl-wrap"><table>
@@ -296,11 +321,11 @@ async function renderHome() {
         <tbody>${ranked.map((e, i) => {
           const h = e.headline;
           return `<tr class="click ${i === 0 ? "top" : ""}" data-href="#/e/${e.id}">
-            <td class="rank">${i + 1}</td>
+            <td class="rank"><i>${i + 1}</i></td>
             <td><b>${esc(e.name)}</b> <span class="pill ver">v${e.version}</span><div class="muted small">${esc(e.model)} · ${esc(h.dataset)}</div></td>
             <td class="num">${pct(h.train_accuracy)}</td><td class="num">${pct(h.test_accuracy)}</td>
             <td class="num ${sgn(h.test_sharpe)}">${num(h.test_sharpe)}</td><td class="num ${sgn(h.wf_mean_sharpe)}">${num(h.wf_mean_sharpe)}</td>
-            <td class="num">${num(h.buy_hold_sharpe)}</td><td class="num score">${num(e.score)}</td>
+            <td class="num">${num(h.buy_hold_sharpe)}</td><td class="num score">${num(e.score)}${scoreBar(e.score, ranked)}</td>
             <td class="num muted">${naiveRank(e.id) || "–"}</td></tr>`;
         }).join("")}</tbody></table></div>` : `<p class="muted">No finished experiments yet.</p>`}
       ${lb.disqualified.length ? `<h3 style="margin-top:16px">Disqualified</h3><div class="tbl-wrap"><table><tbody>
@@ -342,6 +367,13 @@ async function renderHome() {
       });
     }, 1500);
   }
+}
+
+function scoreBar(score, ranked) {
+  const scores = ranked.map((r) => r.score);
+  const lo = Math.min(...scores, 0), hi = Math.max(...scores, 0.0001);
+  const w = Math.max(4, Math.round(((score - lo) / (hi - lo || 1)) * 100));
+  return `<span class="sbar ${score < 0 ? "neg" : ""}"><span style="width:${w}%"></span></span>`;
 }
 
 function statusCell(e) {
@@ -471,7 +503,7 @@ async function renderPreview(did) {
       <div class="tbl-wrap"><table><thead><tr>${Object.keys(d.head[0]).map((k) => `<th class="${k === "date" ? "" : "num"}">${k}</th>`).join("")}</tr></thead>
       <tbody>${d.head.map((r) => `<tr>${Object.entries(r).map(([k, v]) => `<td class="${k === "date" ? "" : "num"}">${v ?? "–"}</td>`).join("")}</tr>`).join("")}</tbody></table></div>
     </section>`;
-  makeChart($("#pxChart"), { type: "line", data: { labels: d.series.dates, datasets: [line("Close", d.series.close, cssVar("--cobalt"))] }, options: baseOptions() });
+  makeChart($("#pxChart"), { type: "line", data: { labels: d.series.dates, datasets: [{ ...line("Close", d.series.close, cssVar("--cyan")), fill: "start", backgroundColor: areaGradient("62,230,255") }] }, options: baseOptions() });
   if (s.has_volume) {
     const o = baseOptions();
     makeChart($("#volChart"), { type: "bar", data: { labels: d.series.dates, datasets: [{ label: "Volume", data: d.series.volume, backgroundColor: cssVar("--bh"), barPercentage: 1, categoryPercentage: 1 }] }, options: o });
@@ -482,7 +514,7 @@ async function renderPreview(did) {
 /* ------------------------------------------------------------------ new experiment */
 
 function defaultConfig() {
-  const preferred = S.datasets.find((d) => d.name === "DEMO_TECH") || S.datasets[0];
+  const preferred = S.datasets.find((d) => d.name === "DEMO_TECH") || S.datasets.find((d) => d.name === "RELIANCE") || S.datasets[0];
   return {
     dataset_id: preferred?.id ?? null, features: [...S.meta.default_features],
     model: { type: "logistic_regression", params: {} }, target: { horizon: 1, threshold: 0 },
@@ -865,6 +897,18 @@ function diffTable(diff) {
     ${diff.map(row).join("")}</tbody></table></div>`;
 }
 
+function areaGradient(rgb) {
+  return (ctx) => {
+    const { chart } = ctx;
+    const a = chart.chartArea;
+    if (!a) return "transparent";
+    const g = chart.ctx.createLinearGradient(0, a.top, 0, a.bottom);
+    g.addColorStop(0, `rgba(${rgb},0.30)`);
+    g.addColorStop(1, `rgba(${rgb},0)`);
+    return g;
+  };
+}
+
 function drawHero(r) {
   const tr = r.curves.train, te = r.curves.test, trb = r.curves.train_buy_hold, teb = r.curves.test_buy_hold;
   const lastS = tr.equity[tr.equity.length - 1], lastB = trb.equity[trb.equity.length - 1];
@@ -875,7 +919,8 @@ function drawHero(r) {
   o.plugins.divider = { index: tr.dates.length, left: "Training (answers seen)", right: "Test (never seen)" };
   makeChart($("#heroChart"), {
     type: "line",
-    data: { labels, datasets: [line("Strategy (net)", strat, cssVar("--cobalt"), false, 2.2), line("Buy and hold", bhv, cssVar("--bh"), true, 1.4)] },
+    data: { labels, datasets: [{ ...line("Strategy (net)", strat, cssVar("--cobalt"), false, 2.2), fill: "start", backgroundColor: areaGradient("139,155,255") },
+      line("Buy and hold", bhv, cssVar("--bh"), true, 1.4)] },
     options: o, plugins: [dividerPlugin],
   });
 }
@@ -963,7 +1008,7 @@ async function renderCompare(q) {
   let data;
   try { data = await api(`/api/compare?ids=${ids.join(",")}`); }
   catch (e) { $("#cmpOut").innerHTML = `<div class="banner bad">${esc(e.message)}</div>`; return; }
-  const palette = [cssVar("--cobalt"), cssVar("--gain"), cssVar("--loss"), cssVar("--caution"), "#8B5CF6", "#0E7490"];
+  const palette = [cssVar("--cobalt"), cssVar("--gain"), cssVar("--loss"), cssVar("--caution"), "#C08CFF", cssVar("--cyan")];
   const rows = [
     ["Train accuracy", (r) => pct(r.predictive.train.accuracy)], ["Test accuracy", (r) => pct(r.predictive.test.accuracy)],
     ["Test ROC AUC", (r) => num(r.predictive.test.roc_auc, 3)], ["Test return (net)", (r) => pct(r.strategy.test.total_return)],
@@ -1024,7 +1069,7 @@ function renderPortfolioPanel(data) {
           ${r.legs.map((l) => `<tr><td class="muted">${esc(l.name)} alone</td><td class="num ${sgn(l.total_return)}">${pct(l.total_return)}</td><td class="num">${num(l.sharpe)}</td><td></td><td class="num">${pct(l.max_drawdown)}</td><td class="num">${pct(l.avg_weight, 0)} of portfolio</td></tr>`).join("")}
         </tbody></table></div>`;
       const c = r.curve, bc = r.benchmark_curve;
-      makeChart($("#pfChart"), { type: "line", data: { labels: c.dates, datasets: [line("Portfolio", c.equity, cssVar("--cobalt"), false, 2.2), line("Equal-weight buy and hold", bc.equity, cssVar("--bh"), true, 1.4)] }, options: baseOptions({ log: true }) });
+      makeChart($("#pfChart"), { type: "line", data: { labels: c.dates, datasets: [{ ...line("Portfolio", c.equity, cssVar("--cobalt"), false, 2.2), fill: "start", backgroundColor: areaGradient("139,155,255") }, line("Equal-weight buy and hold", bc.equity, cssVar("--bh"), true, 1.4)] }, options: baseOptions({ log: true }) });
     } catch (err) {
       out.innerHTML = `<div class="banner bad">${esc(err.message)}</div>`;
     }

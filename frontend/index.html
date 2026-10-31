@@ -5,17 +5,18 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SignalForge</title>
 <meta name="description" content="Quantitative research and experiment management terminal">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2314213D'/%3E%3Cpolyline points='5,22 11,15 16,18 21,9 27,12' fill='none' stroke='%237C8CFF' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<meta name="theme-color" content="#060912">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23101833'/%3E%3Cpolyline points='5,22 11,15 16,18 21,9 27,12' fill='none' stroke='%237C8CFF' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/static/styles.css">
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/styles.css?v=2">
 </head>
 <body>
 <div class="shell">
   <aside class="side">
     <a class="brand" href="#/">
-      <svg viewBox="0 0 32 32" width="26" height="26" aria-hidden="true"><rect width="32" height="32" rx="7" fill="currentColor"/><polyline points="5,22 11,15 16,18 21,9 27,12" fill="none" stroke="var(--cobalt-soft)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <svg viewBox="0 0 32 32" width="26" height="26" aria-hidden="true"><rect width="32" height="32" rx="7" fill="currentColor"/><polyline points="5,22 11,15 16,18 21,9 27,12" fill="none" stroke="#3EE6FF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
       <span>SignalForge</span>
     </a>
     <label class="proj-pick">
@@ -24,6 +25,7 @@
     </label>
     <nav id="nav" class="nav"></nav>
     <div class="side-foot">
+      <div class="status-card" id="statusCard"><b><span class="live-dot"></span>Engine online</b></div>
       <a href="#/projects">All projects</a>
     </div>
   </aside>
@@ -31,6 +33,6 @@
 </div>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 <script src="/static/vendor/chart.umd.js"></script>
-<script src="/static/app.js"></script>
+<script src="/static/app.js?v=2"></script>
 </body>
 </html>
