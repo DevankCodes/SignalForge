@@ -29,6 +29,7 @@ MAX_UPLOAD_MB = 150
 
 executor = ThreadPoolExecutor(max_workers=int(os.environ.get("SIGNALFORGE_WORKERS", "2")))
 LIVE: dict[int, dict] = {}  # in-memory progress for running jobs (also persisted to SQLite)
+STATE = {"seeding": False}  # true while the demo workspace is being created on first boot
 
 
 # --------------------------------------------------------------------------- presets
@@ -274,8 +275,20 @@ async def lifespan(app: FastAPI):
     for row in db.query("SELECT id FROM experiments WHERE status IN ('queued','running')"):
         executor.submit(_run_job, row["id"])
     if not db.one("SELECT id FROM projects LIMIT 1") and os.environ.get("SIGNALFORGE_SEED", "1") == "1":
-        seed_demo()
-        seed_real()  # created last, so it opens first when real data is bundled
+        # Seed in the background so the server answers immediately (slow free-tier CPUs take minutes).
+        import threading
+
+        def _seed():
+            STATE["seeding"] = True
+            try:
+                seed_demo()
+                seed_real()  # created last, so it opens first when real data is bundled
+            except Exception:
+                traceback.print_exc()
+            finally:
+                STATE["seeding"] = False
+
+        threading.Thread(target=_seed, daemon=True).start()
     yield
 
 
@@ -291,7 +304,7 @@ async def dataset_error_handler(_, exc: DatasetError):
 
 @app.get("/api/health")
 def health():
-    return {"ok": True}
+    return {"ok": True, "seeding": STATE["seeding"]}
 
 
 @app.get("/api/meta")
@@ -578,7 +591,7 @@ def compare(ids: str):
 app.mount("/static", StaticFiles(directory=FRONTEND), name="static")
 
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 def index():
     return FileResponse(FRONTEND / "index.html")
 

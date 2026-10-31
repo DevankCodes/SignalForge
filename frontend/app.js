@@ -157,8 +157,22 @@ function renderNav(active) {
     .join("");
 }
 
+async function seedingBanner() {
+  try {
+    const h = await api("/api/health");
+    if (!h.seeding) return false;
+    view().innerHTML = `<div class="panel empty"><h2>Preparing the demo data</h2><p>Importing the NIFTY-50 stocks and running the demo experiments. This page refreshes by itself; it usually takes under a minute.</p></div>`;
+    S.poll = setInterval(async () => {
+      const x = await api("/api/health");
+      if (!x.seeding) { clearInterval(S.poll); S.poll = null; S.projects = []; await loadProjects(); location.hash = S.projects.length ? `#/p/${S.projects[0].id}` : "#/projects"; route(); }
+    }, 3000);
+    return true;
+  } catch { return false; }
+}
+
 async function route() {
   cleanup();
+  if (await seedingBanner()) return;
   const hash = location.hash.replace(/^#/, "") || "/";
   const [path, qs] = hash.split("?");
   const q = new URLSearchParams(qs || "");
